@@ -1,6 +1,7 @@
 /** Tests ACP tool approval classification and spoofing backstops. */
 import { describe, expect, it } from "vitest";
 import { classifyAcpToolApproval } from "./approval-classifier.js";
+import { resolvePermissionRequest } from "./client-helpers.js";
 
 function classify(params: {
   title: string;
@@ -294,5 +295,79 @@ describe("classifyAcpToolApproval", () => {
       approvalClass: "unknown",
       autoApprove: false,
     });
+  });
+
+  it("exercises resolvePermissionRequest callback on Windows for home-relative and in-workspace paths", async () => {
+    const cwd = process.platform === "win32" ? "C:\\workspace" : "/workspace";
+    const logs: string[] = [];
+    const log = (msg: string) => {
+      logs.push(msg);
+    };
+
+    // Case 1: Outside-workspace Windows home-relative path (~\.ssh\id_rsa)
+    let promptCalled1 = false;
+    let promptedTool1: string | undefined;
+    let promptedTitle1 = "";
+    const res1 = await resolvePermissionRequest(
+      {
+        sessionId: "sess-1",
+        toolCall: {
+          toolCallId: "call_home_ssh",
+          title: "read: ~\\.ssh\\id_rsa",
+          status: "pending",
+          rawInput: { path: "~\\.ssh\\id_rsa" },
+        },
+        options: [
+          { kind: "allow_once", name: "Allow once", optionId: "allow" },
+          { kind: "reject_once", name: "Reject once", optionId: "reject" },
+        ],
+      },
+      {
+        cwd,
+        log,
+        prompt: async (toolName, toolTitle) => {
+          promptCalled1 = true;
+          promptedTool1 = toolName;
+          promptedTitle1 = toolTitle;
+          return false;
+        },
+      },
+    );
+
+    expect(promptCalled1).toBe(true);
+    expect(promptedTool1).toBe("read");
+    expect(promptedTitle1).toBe("read: ~\\.ssh\\id_rsa");
+    expect(res1).toEqual({ outcome: { outcome: "selected", optionId: "reject" } });
+    expect(logs).toContain("\n[permission requested] read: ~\\.ssh\\id_rsa (read) [other]");
+
+    // Case 2: Normal in-workspace read (<workspace>\src\index.ts)
+    let promptCalled2 = false;
+    const res2 = await resolvePermissionRequest(
+      {
+        sessionId: "sess-2",
+        toolCall: {
+          toolCallId: "call_in_workspace",
+          title: "read: src\\index.ts",
+          status: "pending",
+          rawInput: { path: "src\\index.ts" },
+        },
+        options: [
+          { kind: "allow_once", name: "Allow once", optionId: "allow" },
+          { kind: "reject_once", name: "Reject once", optionId: "reject" },
+        ],
+      },
+      {
+        cwd,
+        log,
+        prompt: async () => {
+          promptCalled2 = true;
+          return true;
+        },
+      },
+    );
+
+    expect(promptCalled2).toBe(false);
+    expect(res2).toEqual({ outcome: { outcome: "selected", optionId: "allow" } });
+    expect(logs).toContain("[permission auto-approved] read (readonly_scoped)");
   });
 });
