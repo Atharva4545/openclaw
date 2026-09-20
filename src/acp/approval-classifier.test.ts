@@ -45,23 +45,21 @@ describe("classifyAcpToolApproval", () => {
     });
   });
 
-  it.each([
-    "~/.ssh/id_rsa",
-    "~\\.ssh\\id_rsa",
-    "~/Desktop/secret.txt",
-    "~\\Desktop\\secret.txt",
-  ])("does not auto-approve home-relative reads outside cwd (%s)", (pathInput) => {
-    expect(
-      classify({
-        title: `read: ${pathInput}`,
-        rawInput: { path: pathInput },
-      }),
-    ).toEqual({
-      toolName: "read",
-      approvalClass: "other",
-      autoApprove: false,
-    });
-  });
+  it.each(["~/.ssh/id_rsa", "~\\.ssh\\id_rsa", "~/Desktop/secret.txt", "~\\Desktop\\secret.txt"])(
+    "does not auto-approve home-relative reads outside cwd (%s)",
+    (pathInput) => {
+      expect(
+        classify({
+          title: `read: ${pathInput}`,
+          rawInput: { path: pathInput },
+        }),
+      ).toEqual({
+        toolName: "read",
+        approvalClass: "other",
+        autoApprove: false,
+      });
+    },
+  );
 
   it.each([
     "file:///outside/marker.txt",
