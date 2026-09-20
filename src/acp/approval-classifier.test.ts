@@ -10,7 +10,7 @@ function classify(params: {
   cwd?: string;
 }) {
   return classifyAcpToolApproval({
-    cwd: params.cwd ?? "/workspace",
+    cwd: params.cwd ?? (process.platform === "win32" ? "C:\\workspace" : "/workspace"),
     toolCall: {
       title: params.title,
       locations: params.locations,
@@ -45,11 +45,16 @@ describe("classifyAcpToolApproval", () => {
     });
   });
 
-  it("does not auto-approve reads outside cwd", () => {
+  it.each([
+    "~/.ssh/id_rsa",
+    "~\\.ssh\\id_rsa",
+    "~/Desktop/secret.txt",
+    "~\\Desktop\\secret.txt",
+  ])("does not auto-approve home-relative reads outside cwd (%s)", (pathInput) => {
     expect(
       classify({
-        title: "read: ~/.ssh/id_rsa",
-        rawInput: { path: "~/.ssh/id_rsa" },
+        title: `read: ${pathInput}`,
+        rawInput: { path: pathInput },
       }),
     ).toEqual({
       toolName: "read",
@@ -80,11 +85,20 @@ describe("classifyAcpToolApproval", () => {
     });
   });
 
-  it.each([
-    "file:///workspace/src/index.ts",
-    "FILE:///workspace/src/index.ts",
-    "file:/workspace/src/index.ts",
-  ])("auto-approves in-cwd file URL %s", (fileUrl) => {
+  const inCwdFileUrls =
+    process.platform === "win32"
+      ? [
+          "file:///C:/workspace/src/index.ts",
+          "FILE:///C:/workspace/src/index.ts",
+          "file:/C:/workspace/src/index.ts",
+        ]
+      : [
+          "file:///workspace/src/index.ts",
+          "FILE:///workspace/src/index.ts",
+          "file:/workspace/src/index.ts",
+        ];
+
+  it.each(inCwdFileUrls)("auto-approves in-cwd file URL %s", (fileUrl) => {
     expect(
       classify({
         title: "read: ignored-by-raw-input",
